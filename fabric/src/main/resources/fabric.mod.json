@@ -16,10 +16,10 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "me.wawwior.temple.fabric.ExampleModFabric"
+      "me.wawwior.temple.fabric.TempleFabric"
     ],
     "client": [
-      "me.wawwior.temple.fabric.client.ExampleModFabricClient"
+      "me.wawwior.temple.fabric.client.TempleFabricClient"
     ]
   },
   "mixins": [
