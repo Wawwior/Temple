@@ -3,7 +3,6 @@ package me.wawwior.temple.registry;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import com.mojang.datafixers.util.Pair;
 
@@ -24,7 +23,7 @@ public class RegistryHelper {
         this.modId = modId;
     }
 
-    public static <T, U> void register(Class<?> clazz, Consumer<Registrant<T, U>> consumer, String modId) {
+    public static <T, U> void register(Class<?> clazz, RegistrantConsumer<T, U> consumer, String modId) {
         consumer.accept((type, key, mapper) -> {
 
             FieldHandler<Pair<String, T>> fieldHandler = handlerForType(type);
@@ -40,7 +39,7 @@ public class RegistryHelper {
         });
     }
 
-    public <T, U> void register(Class<?> clazz, Consumer<Registrant<T, U>> consumer) {
+    public <T, U> void register(Class<?> clazz, RegistrantConsumer<T, U> consumer) {
         register(clazz, consumer, modId);
     }
 
