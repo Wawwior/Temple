@@ -18,8 +18,7 @@ public final class Temple {
 
     public static void init() {
         // Write common init code here.
-        registryHelper.register(TempleItems.class, Registrant.simple(Item.class, Registries.ITEM));
-        registryHelper.register(TempleBlocks.class, Registrant.simple(Block.class, Registries.BLOCK));
-        registryHelper.register(TempleBlocks.class, Registrant.of(Block.class, Registries.ITEM, block -> new BlockItem(block, new Item.Properties().rarity(Rarity.EPIC))));
+        registryHelper.registerClass(TempleItems.class, Registrant.ITEM);
+        registryHelper.registerClass(TempleBlocks.class, Registrant.BLOCK.with(Registrant.BLOCK_ITEM));
     }
 }

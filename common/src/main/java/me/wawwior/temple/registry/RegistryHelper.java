@@ -3,11 +3,13 @@ package me.wawwior.temple.registry;
 import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import com.mojang.datafixers.util.Pair;
 
-import dev.architectury.registry.registries.Registrar;
 import dev.architectury.registry.registries.RegistrarManager;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -23,33 +25,33 @@ public class RegistryHelper {
         this.modId = modId;
     }
 
-    public static <T, U> void register(Class<?> clazz, RegistrantConsumer<T, U> consumer, String modId) {
-        consumer.accept((type, key, mapper) -> {
+    @SuppressWarnings("unchecked")
+    public static <T, U> void registerClass(Class<?> clazz, Registrant<T, U> registrant, String modId) {
 
-            FieldHandler<Pair<String, T>> fieldHandler = handlerForType(type);
-            Registrar<U> registrar = registrarForMod(modId).get(key);
+        for (Field field : clazz.getFields()) {
 
-            for (Field field : clazz.getFields()) {
+            Optional<Pair<ResourceLocation, T>> fieldValue = Optional.empty();
 
-                fieldHandler.apply(field)
-                            .map(pair -> Pair.of(pair.getFirst(), mapper.apply(pair.getSecond())))
-                            .ifPresent(pair -> registrar.register(ResourceLocation.tryBuild(modId, pair.getFirst()), () -> pair.getSecond()));
-
+            if (registrant.getType().isAssignableFrom(field.getType())) {
+                try {
+                    fieldValue = Optional.of(Pair.of(ResourceLocation.tryBuild(modId, field.getName().toLowerCase()), (T) field.get(null)));
+                } catch (IllegalArgumentException | IllegalAccessException ignore) {}
             }
-        });
+
+            fieldValue.ifPresent(pair -> registrant.register(pair.getFirst(), pair.getSecond()));
+        }
     }
 
-    public <T, U> void register(Class<?> clazz, RegistrantConsumer<T, U> consumer) {
-        register(clazz, consumer, modId);
+    public <T, U> void registerClass(Class<?> clazz, Registrant<T, U> registrant) {
+        registerClass(clazz, registrant, modId);
+    }
+
+    public static <T> void register(ResourceKey<Registry<T>> key, ResourceLocation id, T value) {
+        registrarForMod(id.getNamespace()).get(key).register(id, () -> value);
     }
 
     public static RegistrarManager registrarForMod(String modId) {
         return managers.computeIfAbsent(modId, id -> RegistrarManager.get(id));
     }
-
-    private static <T> FieldHandler<Pair<String, T>> handlerForType(Class<T> type) {
-        return FieldHandler.forType(type, (field, t) -> Pair.of(field.getName().toLowerCase(), t));
-    }
-
 }
 
