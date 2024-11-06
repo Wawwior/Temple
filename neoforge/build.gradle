@@ -41,6 +41,24 @@ dependencies {
     shadowBundle project(path: ':common', configuration: 'transformProductionNeoForge')
 }
 
+def generatedResources = file("src/generated")
+
+sourceSets {
+    main {
+        resources.srcDir generatedResources
+    }
+}
+
+loom {
+    runs {
+        data {
+            data()
+            programArgs "--all", "--mod", "temple"
+            programArgs "--output", generatedResources.absolutePath
+        }
+    }
+}
+
 processResources {
     inputs.property 'version', project.version
 

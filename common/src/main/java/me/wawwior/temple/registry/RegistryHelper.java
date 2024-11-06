@@ -1,13 +1,13 @@
 package me.wawwior.temple.registry;
 
 import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.function.Supplier;
 
-import com.mojang.datafixers.util.Pair;
+import com.google.common.reflect.TypeToken;
 
+import dev.architectury.registry.registries.Registrar;
 import dev.architectury.registry.registries.RegistrarManager;
+import me.wawwior.temple.Temple;
 import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -19,26 +19,29 @@ public class RegistryHelper {
 
     private final String modId;
 
-    private static final Map<String, RegistrarManager> managers = new HashMap<>();
-
     public RegistryHelper(String modId) {
         this.modId = modId;
     }
 
-    @SuppressWarnings("unchecked")
     public static <T, U> void registerClass(Class<?> clazz, Registrant<T, U> registrant, String modId) {
-
         for (Field field : clazz.getFields()) {
-
-            Optional<Pair<ResourceLocation, T>> fieldValue = Optional.empty();
-
-            if (registrant.getType().isAssignableFrom(field.getType())) {
+            if (field.getType() == Supplier.class) {
                 try {
-                    fieldValue = Optional.of(Pair.of(ResourceLocation.tryBuild(modId, field.getName().toLowerCase()), (T) field.get(null)));
-                } catch (IllegalArgumentException | IllegalAccessException ignore) {}
-            }
 
-            fieldValue.ifPresent(pair -> registrant.register(pair.getFirst(), pair.getSecond()));
+                    TypeToken<?> fieldType = TypeToken.of(field.getGenericType()).resolveType(Supplier.class.getTypeParameters()[0]);
+
+                    Supplier<?> fieldValue = (Supplier<?>) field.get(null);
+
+                    if (fieldType.equals(registrant.typeToken())) {
+                        @SuppressWarnings("unchecked")
+                        Supplier<T> supplier = () -> (T) fieldValue.get();
+                        registrant.register(new AnnotationInfo(field), ResourceLocation.tryBuild(modId, field.getName().toLowerCase()), supplier);
+                    }
+
+                } catch (IllegalArgumentException | IllegalAccessException e) {
+                    Temple.LOGGER.info("How did we get here", e);
+                }
+            }
         }
     }
 
@@ -46,12 +49,13 @@ public class RegistryHelper {
         registerClass(clazz, registrant, modId);
     }
 
-    public static <T> void register(ResourceKey<Registry<T>> key, ResourceLocation id, T value) {
-        registrarForMod(id.getNamespace()).get(key).register(id, () -> value);
+    public static <T> void register(ResourceKey<Registry<T>> key, ResourceLocation id, Supplier<T> value) {
+        Registrar<T> registrar = registrarForMod(id.getNamespace()).get(key);
+        registrar.register(id, value);
     }
 
     public static RegistrarManager registrarForMod(String modId) {
-        return managers.computeIfAbsent(modId, id -> RegistrarManager.get(id));
+        return RegistrarManager.get(modId);
     }
 }
 

@@ -1,79 +1,82 @@
 package me.wawwior.temple.registry;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
-import net.minecraft.core.BlockPos;
+import com.google.common.base.Suppliers;
+import com.google.common.reflect.TypeToken;
+
+import me.wawwior.temple.registry.builtin.annotations.Id;
 import net.minecraft.core.Registry;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.level.block.Block;
 
 /**
  * Registrant
  */
-public interface Registrant<T, U> {
+public abstract class Registrant<T, U> {
+    private final List<Registrant<U, ?>> children = new ArrayList<>();
 
-    static Registrant<Item, Item> ITEM = simple(Item.class, Registries.ITEM);
+    private final TypeToken<T> type;
 
-    static Registrant<Block, Block> BLOCK = simple(Block.class, Registries.BLOCK);
+    private final Function<T, U> mapper;
 
-    static Registrant<Block, Item> BLOCK_ITEM = of(Block.class, Registries.ITEM, block -> new BlockItem(block, new Item.Properties()));
+    public Registrant(Class<T> type, Function<T, U> mapper) {
+        this.type = TypeToken.of(type);
+        this.mapper = mapper;
+    }
 
-    void register(ResourceLocation id, T value);
+    public void register(AnnotationInfo info, ResourceLocation id, Supplier<T> value) {
+        Supplier<T> supplier = Suppliers.memoize(value::get);
 
-    Function<T, U> getMapper();
+        if (registerInternal(info, id, supplier)) {
+            children.forEach(child -> child.register(info, id, Suppliers.memoize(() -> mapper.apply(supplier.get()))));
+        }
+    }
 
-    Class<T> getType();
+    protected abstract boolean registerInternal(AnnotationInfo info, ResourceLocation id, Supplier<T> value);
 
-    default <V> Registrant<T, U> with(Registrant<T, V> next) {
-        Registrant<T, U> current = this;
-        return new Registrant<T, U>() {
+    public TypeToken<T> typeToken() {
+        return type;
+    }
+
+    public <V> Registrant<T, U> with(Registrant<U, V> next) {
+        children.add(next);
+        return this;
+    }
+
+    public static <T, U> Registrant<T, U> of(Class<T> type, ResourceKey<Registry<U>> key, Function<T, U> mapper, Predicate<AnnotationInfo> annotationPredicate) {
+        return new Registrant<T, U>(type, mapper) {
 
             @Override
-            public void register(ResourceLocation id, T value) {
-                current.register(id, value);
-                next.register(id, value);
-            }
-
-            @Override
-            public Function<T, U> getMapper() {
-                return current.getMapper();
-            }
-
-            @Override
-            public Class<T> getType() {
-                return current.getType();
+            protected boolean registerInternal(AnnotationInfo info, ResourceLocation id, Supplier<T> value) {
+                if (annotationPredicate.test(info)) {
+                    info.getAnnotation(Id.class).ifPresentOrElse(
+                            anno -> RegistryHelper.register(key, ResourceLocation.tryBuild(id.getNamespace(), anno.name()), () -> mapper.apply(value.get())),
+                            () -> RegistryHelper.register(key, id, () -> mapper.apply(value.get()))
+                        );
+                    return true;
+                } else {
+                    return false;
+                }
             }
 
         };
     }
 
-    static <T, U> Registrant<T, U> of(Class<T> type, ResourceKey<Registry<U>> key, Function<T, U> mapper) {
-        return new Registrant<T, U>() {
-
-            @Override
-            public void register(ResourceLocation id, T value) {
-                RegistryHelper.register(key, id, mapper.apply(value));
-            }
-
-            @Override
-            public Class<T> getType() {
-                return type;
-            }
-
-            @Override
-            public Function<T, U> getMapper() {
-                return mapper;
-            }
-
-        };
+    public static <T, U> Registrant<T, U> of(Class<T> type, ResourceKey<Registry<U>> key, Function<T, U> mapper) {
+        return of(type, key, mapper, a -> true);
     }
 
-    static <T> Registrant<T, T> simple(Class<T> type, ResourceKey<Registry<T>> key) {
-        return of(type, key, Function.identity());
+    public static <T> Registrant<T, T> simple(Class<T> type, ResourceKey<Registry<T>> key, Predicate<AnnotationInfo> annotationPredicate) {
+        return of(type, key, Function.identity(), annotationPredicate);
+    }
+
+    public static <T> Registrant<T, T> simple(Class<T> type, ResourceKey<Registry<T>> key) {
+        return simple(type, key, a -> true);
     }
 
 }
